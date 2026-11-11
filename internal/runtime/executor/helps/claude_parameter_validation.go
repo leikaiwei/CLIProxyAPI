@@ -25,7 +25,6 @@ func (e ClaudeParameterError) ResponseBody() []byte {
 	return doc.Bytes()
 }
 
-// ValidateClaudeThinkingDisplay checks the final payload and emitted feature headers.
 func ValidateClaudeThinkingDisplay(body []byte, headers http.Header) error {
 	display := ojson.GetBytesNoCopy(body, "thinking.display")
 	if !display.Exists() || display.Type == ojson.Null {
@@ -53,9 +52,8 @@ func ValidateClaudeThinkingDisplay(body []byte, headers http.Header) error {
 	return ClaudeParameterError{Param: "thinking.display", Message: "thinking.display must be summarized, omitted, or updates with its beta header"}
 }
 
-var claudeParameterSchemaError = regexp.MustCompile(`^((?:thinking|output_config|messages|tools|tool_choice|system|context_management)(?:\.[A-Za-z0-9_]+)*): (?:Input should be |Extra inputs are not permitted)`)
+var claudeParameterSchemaError = regexp.MustCompile(`^((?:thinking|output_config|messages|tools|tool_choice|system|context_management)(?:\.[A-Za-z_][A-Za-z_0-9]*|\.\d+)*): (?:Input should be '[^\n]+'|Extra inputs are not permitted)$`)
 
-// ClassifyClaudeParameterError only recognizes field-level schema refusals, not channel failures.
 func ClassifyClaudeParameterError(status int, body []byte) error {
 	if status != http.StatusBadRequest || ojson.GetBytesNoCopy(body, "error.type").String() != "invalid_request_error" {
 		return nil

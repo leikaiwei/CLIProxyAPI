@@ -42,11 +42,16 @@ func TestClassifyClaudeParameterError(t *testing.T) {
 		reject bool
 	}{
 		{"display", 400, `{"error":{"type":"invalid_request_error","message":"thinking.adaptive.display: Input should be 'summarized', 'omitted'"}}`, true},
-		{"tool choice", 400, `{"error":{"type":"invalid_request_error","message":"tool_choice: Input should be a valid dictionary"}}`, true},
+		{"tool choice", 400, `{"error":{"type":"invalid_request_error","message":"tool_choice.type: Input should be 'auto', 'any', 'tool'"}}`, true},
 		{"extra field", 400, `{"error":{"type":"invalid_request_error","message":"messages.2.output_config: Extra inputs are not permitted"}}`, true},
 		{"model support", 400, `{"error":{"type":"invalid_request_error","message":"model: Input should be an available model"}}`, false},
 		{"unknown bad request", 400, `{"error":{"type":"invalid_request_error","message":"request failed"}}`, false},
 		{"overload", 503, `{"error":{"type":"invalid_request_error","message":"thinking.adaptive.display: Input should be 'omitted'"}}`, false},
+		{"extra diagnostic", 400, `{"error":{"type":"invalid_request_error","message":"thinking.adaptive.display: Extra inputs are not permitted\nquoted tool content"}}`, false},
+		{"enum extra diagnostic", 400, `{"error":{"type":"invalid_request_error","message":"thinking.adaptive.display: Input should be 'omitted'\nquoted tool content"}}`, false},
+		{"same line suffix", 400, `{"error":{"type":"invalid_request_error","message":"thinking.adaptive.display: Extra inputs are not permitted in this channel"}}`, false},
+		{"unquoted diagnostic", 400, `{"error":{"type":"invalid_request_error","message":"tool_choice: Input should be a valid dictionary"}}`, false},
+		{"invalid field segment", 400, `{"error":{"type":"invalid_request_error","message":"messages.2invalid: Extra inputs are not permitted"}}`, false},
 		{"non schema", 400, `{"error":{"type":"invalid_request_error","message":"thinking.adaptive.display: service unavailable"}}`, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
