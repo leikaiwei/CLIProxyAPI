@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor/helps"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
@@ -906,4 +907,21 @@ func TestClaudeStreamMultiLineDataEventsAreRecognizedAcrossChunks(t *testing.T) 
 			t.Fatalf("expected terminal error event when stream truncated after multiline tool_use containing nested message_stop line; body=%q", body)
 		}
 	})
+}
+
+func TestClaudeParameterErrorPreservesTerminalCode(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	handler := &ClaudeCodeAPIHandler{}
+	err := helps.ClaudeParameterError{Param: "thinking.display", Message: "Unsupported thinking display"}
+	handler.WriteErrorResponse(ctx, handlers.ExecutionErrorMessage(err))
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	if got := ojson.Get(recorder.Body.String(), "error.code").String(); got != "unsupported_request_parameter" {
+		t.Fatalf("code = %q", got)
+	}
+	if got := ojson.Get(recorder.Body.String(), "error.param").String(); got != err.Param {
+		t.Fatalf("param = %q", got)
+	}
 }

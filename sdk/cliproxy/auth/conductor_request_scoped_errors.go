@@ -301,6 +301,9 @@ func MatchRequestScopedErrorAction(auth *Auth, err error, cfg *internalconfig.Co
 }
 
 func matchRequestScopedErrorAction(auth *Auth, err error, cfg *internalconfig.Config) (string, bool) {
+	if isRequestStopError(err) {
+		return RequestScopedActionStop, true
+	}
 	if err == nil || cliproxyexecutor.IsUpstreamWebsocketTurnError(err) {
 		return "", false
 	}
