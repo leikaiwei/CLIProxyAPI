@@ -1003,7 +1003,7 @@ func TestClaudeExecutor_ConfirmedCLIForwardsNativeOpus55Shape(t *testing.T) {
 
 	const userID = `{"device_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","account_uuid":"11111111-2222-4333-8444-555555555555","session_id":"11111111-2222-4333-8444-555555555555"}`
 	const billing = "x-anthropic-billing-header: cc_version=2.1.280.d7b; cc_entrypoint=cli; cch=00000; cc_turn_origin=human;"
-	const betas = "thinking-display-updates-2026-08-18,claude-code-20250219,oauth-2025-04-20,mid-conversation-system-clear-at-2026-08-21,thinking-binding-controls-2026-08-01,extended-cache-ttl-2025-04-11"
+	const betas = "claude-code-20250219,oauth-2025-04-20,mid-conversation-system-clear-at-2026-08-21,thinking-binding-controls-2026-08-01,extended-cache-ttl-2025-04-11"
 	payload := []byte(`{"model":"claude-opus-5-5","system":[{"type":"text","text":` + fmt.Sprintf("%q", billing) + `},{"type":"text","text":"native identity"},{"type":"text","text":"native model block"}],"messages":[{"role":"user","content":"hello"}],"metadata":{"user_id":` + fmt.Sprintf("%q", userID) + `},"fallbacks":[{"model":"claude-opus-4-8"}],"thinking":{"type":"adaptive","display":"updates"}}`)
 	incoming := http.Header{
 		"User-Agent":                  {"claude-cli/2.1.321 (external, cli)"},
@@ -6652,7 +6652,7 @@ func TestClaudeExecutor_PayloadMaxTokensOverrideDoesNotReclassifyBuiltins(t *tes
 
 }
 
-func TestClaudeExecutor_PayloadFableProbeOverrideRejectsMissingDisplayBeta(t *testing.T) {
+func TestClaudeExecutor_PayloadFableProbeOverrideKeepsBuiltinAdditions(t *testing.T) {
 	var seenBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seenBody, _ = io.ReadAll(r.Body)
@@ -6691,13 +6691,20 @@ func TestClaudeExecutor_PayloadFableProbeOverrideRejectsMissingDisplayBeta(t *te
 		Model:   "claude-fable-5-1",
 		Payload: payload,
 	}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FormatClaude})
-	var parameterError helps.ClaudeParameterError
-	if !errors.As(err, &parameterError) || parameterError.Param != "thinking.display" {
-		t.Fatalf("error = %v, want thinking.display rejection", err)
+	if err != nil {
+		t.Fatalf("Execute error = %v", err)
 	}
-	if seenBody != nil {
-		t.Fatal("invalid final payload reached upstream")
+
+	if ojson.GetBytes(seenBody, "fallbacks.0.model").String() != "claude-opus-5" {
+		t.Fatalf("payload override must not rerun built-ins: %s", seenBody)
 	}
+	if !strings.Contains(strings.ReplaceAll(ojson.GetBytes(seenBody, "system").Raw, "\u200b", ""), "eporting outcomes") {
+		t.Fatalf("payload override must not rerun built-ins: %s", seenBody)
+	}
+	if ojson.GetBytes(seenBody, "max_tokens").Int() != 1 || ojson.GetBytes(seenBody, "thinking.display").String() != "updates" {
+		t.Fatalf("payload override must not rerun built-ins: %s", seenBody)
+	}
+
 }
 
 func TestClaudeExecutor_PayloadProbeToNormalDoesNotReinitializeBuiltins(t *testing.T) {
@@ -7139,10 +7146,12 @@ func TestClaudeExecutor_PayloadStringSystemWithExactReportingPromptDoesNotDuplic
 	}
 }
 
-func TestClaudeExecutor_PayloadFableThinkingAdaptiveToDisabledRejectsDisplay(t *testing.T) {
+func TestClaudeExecutor_PayloadFableThinkingAdaptiveToDisabledKeepsBuiltinDisplay(t *testing.T) {
+	var seenHeaders http.Header
 	var seenBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seenBody, _ = io.ReadAll(r.Body)
+		seenHeaders = r.Header.Clone()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"msg_1","type":"message","model":"claude-fable-5-1","role":"assistant","content":[{"type":"text","text":"ok"}]}`))
 	}))
@@ -7179,12 +7188,18 @@ func TestClaudeExecutor_PayloadFableThinkingAdaptiveToDisabledRejectsDisplay(t *
 		Model:   "claude-fable-5-1",
 		Payload: payload,
 	}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FormatClaude})
-	var parameterError helps.ClaudeParameterError
-	if !errors.As(err, &parameterError) || parameterError.Param != "thinking.display" {
-		t.Fatalf("error = %v, want thinking.display rejection", err)
+	if err != nil {
+		t.Fatalf("Execute error = %v", err)
 	}
-	if seenBody != nil {
-		t.Fatal("invalid final payload reached upstream")
+
+	// The scalar override does not rerun thinking normalization.
+	if ojson.GetBytes(seenBody, "thinking.display").String() != "updates" {
+		t.Fatalf("thinking.display must remain untouched by the thinking.type override, got: %s", ojson.GetBytes(seenBody, "thinking").Raw)
+	}
+	// thinking-display-updates beta header must NOT be present
+	betas := seenHeaders.Get("anthropic-beta")
+	if strings.Contains(betas, "thinking-display-updates") {
+		t.Fatalf("thinking-display-updates beta header must NOT be present on disabled thinking, got: %s", betas)
 	}
 }
 

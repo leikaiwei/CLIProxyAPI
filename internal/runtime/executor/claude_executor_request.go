@@ -888,9 +888,6 @@ func classifyClaudeUpstreamError(statusCode int, headers http.Header, body []byt
 }
 
 func classifyClaudeUpstreamErrorWithCooling(statusCode int, headers http.Header, body []byte, modelLevelCooling bool) error {
-	if errParameter := helps.ClassifyClaudeParameterError(statusCode, body); errParameter != nil {
-		return errParameter
-	}
 	var retryAfter *time.Duration
 	if statusCode == http.StatusTooManyRequests || (statusCode >= 400 && statusCode < 600) {
 		retryAfter = helps.ParseClaudeRateLimitResetForError(headers, body, time.Now())
@@ -1503,7 +1500,7 @@ func applyClaudeHeadersWithNativeProfile(
 		} else if stream {
 			restoreCallerTransport()
 		}
-		return helps.ValidateClaudeThinkingDisplay(body, r.Header)
+		return nil
 	}
 
 	identityHeader := func(name, fallback string) {
@@ -1660,7 +1657,7 @@ func applyClaudeHeadersWithNativeProfile(
 		// silently disable event negotiation.
 		applyTransportNegotiation()
 	}
-	return helps.ValidateClaudeThinkingDisplay(body, r.Header)
+	return nil
 }
 
 // doClaudeUpstreamRequest is the single send boundary for every Claude upstream
